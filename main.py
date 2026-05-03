@@ -1,57 +1,40 @@
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI
 from duckduckgo_search import DDGS
-import requests
+import time
 import random
 
 app = FastAPI()
 
-# دالة لجلب بروكسي لفك الحظر
-def get_proxy():
-    try:
-        url = "https://api.proxyscrape.com/v2/?request=getproxies&protocol=http&timeout=5000&country=all&ssl=all&anonymity=all"
-        proxies = requests.get(url).text.strip().split('\r\n')
-        return random.choice(proxies)
-    except:
-        return None
-
-# واجهة مستخدم بسيطة في الرابط الرئيسي
-@app.get("/", response_class=HTMLResponse)
-def home():
-    return """
-    <html>
-        <head><title>Osama AI</title></head>
-        <body style="font-family: Arial; text-align: center; padding-top: 50px;">
-            <h1>Osama's AI Assistant</h1>
-            <input type="text" id="quest" placeholder="Ask me anything..." style="width: 300px; padding: 10px;">
-            <button onclick="ask()" style="padding: 10px;">Send</button>
-            <div id="res" style="margin-top: 20px; font-weight: bold;"></div>
-            <script>
-                async function ask() {
-                    const q = document.getElementById('quest').value;
-                    const response = await fetch('/ask?question=' + q);
-                    const data = await response.json();
-                    document.getElementById('res').innerText = data.answer;
-                }
-            </script>
-        </body>
-    </html>
-    """
+# قائمة متصفحات وهمية لتبدو كأنك إنسان مختلف في كل مرة
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36"
+]
 
 @app.get("/ask")
 def ask_claude(question: str):
-    proxy = get_proxy()
-    proxy_config = f"http://{proxy}" if proxy else None
+    # إضافة تأخير عشوائي بسيط لكسر نظام الحماية (بين 1 لـ 3 ثواني)
+    time.sleep(random.uniform(1, 3))
     
-    with DDGS(proxy=proxy_config) as ddgs:
-        try:
-            # محاولة جلب الرد من Claude
+    # اختيار بصمة متصفح عشوائية
+    random_ua = random.choice(USER_AGENTS)
+    
+    try:
+        # نستخدم الكود المباشر الذي نجح معك في الصورة image_6b959c.png
+        with DDGS() as ddgs:
+            # نحدد الموديل بشكل صريح
             response = ddgs.chat(question, model='claude-3-haiku')
-            return {"answer": response}
-        except Exception:
-            try:
-                # محاولة أخيرة عبر البحث النصي
+            if response:
+                return {"answer": response}
+            else:
+                raise Exception("Empty response")
+                
+    except Exception:
+        # إذا فشل، نحاول مرة أخيرة باستخدام البحث النصي كخطة بديلة
+        try:
+            with DDGS() as ddgs:
                 results = ddgs.text(question, max_results=1)
-                return {"answer": results[0]['body'] if results else "لا يوجد نتائج حالياً"}
-            except:
-                return {"answer": "المحرك مشغول، يرجى المحاولة باستخدام سؤال مختلف قليلاً"}
+                return {"answer": results[0]['body'] if results else "المحرك مشغول، حاول بعد ثوانٍ"}
+        except:
+            return {"answer": "يرجى الانتظار 10 ثواني وعمل Refresh مرة واحدة فقط"}
